@@ -3,6 +3,9 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 import time
 import logging
 import uuid
+from datetime import datetime
+
+
 
 # شناسه ادمین
 ADMIN_ID = 6410680572
@@ -80,6 +83,27 @@ def send_welcome(message):
         "با چند کلیک ساده سفارش بده و لذت ببر! 😋\n\n"
         "📜 برای شروع، یکی از گزینه‌های زیر رو انتخاب کن:"
     )
+
+    set_persistent_menu()
+
+    # تاریخ و ساعت شروع جشن چهارشنبه‌سوری (18 مارس 2025، ساعت 19:00)
+    event_time = datetime(2025, 3, 18, 19, 0)  # سال، ماه، روز، ساعت، دقیقه
+    now = datetime.now()  # زمان فعلی
+
+    # محاسبه زمان باقی‌مونده
+    time_diff = event_time - now
+
+    # اگه زمان باقی‌مونده بیشتر از 0 باشه، شمارش معکوس نشون بده
+    if time_diff.total_seconds() > 0:
+        days = time_diff.days
+        hours, remainder = divmod(time_diff.seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        timer_message = f"⏳ {days} روز و {hours} ساعت و {minutes} دقیقه مونده به جشن چهارشنبه‌سوری!"
+    else:
+        timer_message = "🎉 جشن چهارشنبه‌سوری شروع شده! خوش اومدی!"
+
+    # اضافه کردن تایمر به پیام خوشامدگویی
+    welcome_caption = welcome_caption + "\n\n" + timer_message
 
     # ارسال عکس با کپشن
     try:
