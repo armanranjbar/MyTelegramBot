@@ -5,8 +5,6 @@ import logging
 import uuid
 from datetime import datetime
 
-
-
 # شناسه ادمین
 ADMIN_ID = 6410680572
 
@@ -26,7 +24,7 @@ pending_payments = {}  # برای ذخیره پرداخت‌های در انتظ
 user_orders = {}  # ساختار: {chat_id: {item: count}}
 user_counts = {}  # تعداد نفرات
 
-# قیمت‌ها
+# قیمت‌ها (فقط برای محاسبه در پس‌زمینه)
 prices = {
     "starter_olive": ("🫒 زیتون", 50),
     "starter_yogurt": ("🍶 ماست", 30),
@@ -37,13 +35,14 @@ prices = {
     "main_badkobe": ("🥮 بادکوبه", 200)
 }
 
-# تنظیم منوی همیشگی
+# تنظیم منوی همیشگی (دستورات پایین سمت چپ)
 def set_persistent_menu():
     commands = [
         BotCommand("start", "🔄 شروع مجدد"),
         BotCommand("menu", "📜 نمایش منو"),
         BotCommand("checkout", "💳 مشاهده فاکتور"),
         BotCommand("edit", "📝 ویرایش فاکتور"),
+        BotCommand("event", "📅 تاریخ جشن"),  # دستور جدید برای تاریخ جشن
     ]
     bot.set_my_commands(commands)
 
@@ -54,6 +53,25 @@ def back_to_menu():
     markup.add(btn_back)
     return markup
 
+# تابع برای محاسبه و نمایش زمان باقی‌مونده به جشن
+def show_event_timer(chat_id):
+    event_time = datetime(2025, 3, 18, 19, 0)  # تاریخ و ساعت شروع جشن چهارشنبه‌سوری
+    now = datetime.now()  # زمان فعلی
+
+    # محاسبه زمان باقی‌مونده
+    time_diff = event_time - now
+
+    # اگه زمان باقی‌مونده بیشتر از 0 باشه، شمارش معکوس نشون بده
+    if time_diff.total_seconds() > 0:
+        days = time_diff.days
+        hours, remainder = divmod(time_diff.seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        timer_message = f"⏳ {days} روز و {hours} ساعت و {minutes} دقیقه مونده به جشن چهارشنبه‌سوری!🎇✨"
+    else:
+        timer_message = "🎉 جشن چهارشنبه‌سوری شروع شده! خوش اومدی!"
+
+    bot.send_message(chat_id, timer_message, reply_markup=back_to_menu())
+
 # ایجاد منوی اصلی
 def main_menu():
     markup = InlineKeyboardMarkup(row_width=2)
@@ -62,7 +80,8 @@ def main_menu():
     btn3 = InlineKeyboardButton("👥 تعداد نفرات", callback_data="select_count")
     btn4 = InlineKeyboardButton("📝 ویرایش فاکتور", callback_data="edit_order")
     btn5 = InlineKeyboardButton("💳 پرداخت نهایی", callback_data="checkout")
-    markup.add(btn1, btn2, btn3, btn4, btn5)
+    btn6 = InlineKeyboardButton("📅 تاریخ جشن", callback_data="show_event")  # دکمه جدید
+    markup.add(btn1, btn2, btn3, btn4, btn5, btn6)
     return markup
 
 # وقتی کاربر /start بزنه، عکس و متن خوشامدگویی نمایش داده بشه
@@ -78,17 +97,16 @@ def send_welcome(message):
     welcome_caption = (
         f"سلام {first_name} جان 😍\n"
         "خیلی خوشحالیم که مارو انتخاب کردی 🎉\n\n"
-        "امیدوارم یک تجربه خفن و باحال رو با ما تجربه کنی🤩\n"
+        "امیدوارم یک شب خفن و باحال رو با ما تجربه کنی🤩\n"
         "از پیش‌غذا تا غذای اصلی، همه‌چیز اینجاست!\n"
         "با چند کلیک ساده سفارش بده و لذت ببر! 😋\n\n"
-        "📜 برای شروع، یکی از گزینه‌های زیر رو انتخاب کن:"
     )
 
     set_persistent_menu()
 
     # تاریخ و ساعت شروع جشن چهارشنبه‌سوری (18 مارس 2025، ساعت 19:00)
-    event_time = datetime(2025, 3, 18, 19, 0)  # سال، ماه، روز، ساعت، دقیقه
-    now = datetime.now()  # زمان فعلی
+    event_time = datetime(2025, 3, 18, 19, 0)
+    now = datetime.now()
 
     # محاسبه زمان باقی‌مونده
     time_diff = event_time - now
@@ -98,7 +116,7 @@ def send_welcome(message):
         days = time_diff.days
         hours, remainder = divmod(time_diff.seconds, 3600)
         minutes, _ = divmod(remainder, 60)
-        timer_message = f"⏳ {days} روز و {hours} ساعت و {minutes} دقیقه مونده به جشن چهارشنبه‌سوری!"
+        timer_message = f"⏳ {days} روز و {hours} ساعت و {minutes} دقیقه مونده به جشن چهارشنبه‌سوری!🎇✨"
     else:
         timer_message = "🎉 جشن چهارشنبه‌سوری شروع شده! خوش اومدی!"
 
@@ -114,12 +132,15 @@ def send_welcome(message):
         bot.send_message(chat_id, welcome_caption, reply_markup=main_menu())
         logging.warning("عکس welcome_image.jpg پیدا نشد! لطفاً فایل را در مسیر درست قرار دهید.")
 
-    set_persistent_menu()
-
 # نمایش منو با /menu
 @bot.message_handler(commands=['menu'])
 def show_menu(message):
     bot.send_message(message.chat.id, "📜 منوی اصلی:", reply_markup=main_menu())
+
+# نمایش تاریخ جشن با /event
+@bot.message_handler(commands=['event'])
+def show_event(message):
+    show_event_timer(message.chat.id)
 
 # مشاهده فاکتور با /checkout
 @bot.message_handler(commands=['checkout'])
@@ -153,6 +174,9 @@ def callback_query(call):
             edit_order(chat_id)
         elif call.data.startswith("remove_"):
             remove_item(call)
+        # مدیریت دکمه تاریخ جشن
+        elif call.data == "show_event":
+            show_event_timer(chat_id)
         # مدیریت دکمه‌های تأیید و رد پرداخت
         elif call.data.startswith("approve_") or call.data.startswith("reject_"):
             admin_id = call.message.chat.id
@@ -205,23 +229,23 @@ def update_count(call):
     user_counts[chat_id] = count
     bot.edit_message_text(f"✅ تعداد نفرات تنظیم شد: {count} نفر", chat_id, call.message.id, reply_markup=back_to_menu())
 
-# منوی انتخاب پیش‌غذا
+# منوی انتخاب پیش‌غذا (بدون قیمت)
 def starter_menu():
     markup = InlineKeyboardMarkup(row_width=1)
-    btn1 = InlineKeyboardButton("🫒 زیتون - 50 تومان", callback_data="starter_olive")
-    btn2 = InlineKeyboardButton("🍶 ماست - 30 تومان", callback_data="starter_yogurt")
-    btn3 = InlineKeyboardButton("🥗 سالاد - 40 تومان", callback_data="starter_salad")
+    btn1 = InlineKeyboardButton("🫒 زیتون", callback_data="starter_olive")
+    btn2 = InlineKeyboardButton("🍶 ماست", callback_data="starter_yogurt")
+    btn3 = InlineKeyboardButton("🥗 سالاد", callback_data="starter_salad")
     btn_back = InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")
     markup.add(btn1, btn2, btn3, btn_back)
     return markup
 
-# منوی انتخاب غذای اصلی
+# منوی انتخاب غذای اصلی (بدون قیمت)
 def main_course_menu():
     markup = InlineKeyboardMarkup(row_width=1)
-    btn1 = InlineKeyboardButton("🍝 ماکارونی - 100 تومان", callback_data="main_pasta")
-    btn2 = InlineKeyboardButton("🍆 کشک بادمجان - 90 تومان", callback_data="main_kashk")
-    btn3 = InlineKeyboardButton("🍟 سیب‌زمینی - 70 تومان", callback_data="main_potato")
-    btn4 = InlineKeyboardButton("🥮 بادکوبه - 200 تومان", callback_data="main_badkobe")
+    btn1 = InlineKeyboardButton("🍝 ماکارونی", callback_data="main_pasta")
+    btn2 = InlineKeyboardButton("🍆 کشک بادمجان", callback_data="main_kashk")
+    btn3 = InlineKeyboardButton("🍟 سیب‌زمینی", callback_data="main_potato")
+    btn4 = InlineKeyboardButton("🥮 بادکوبه", callback_data="main_badkobe")
     btn_back = InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")
     markup.add(btn1, btn2, btn3, btn4, btn_back)
     return markup
@@ -295,7 +319,7 @@ def remove_item(call):
     else:
         bot.send_message(chat_id, "⛔ همه سفارشات حذف شدند!", reply_markup=back_to_menu())
 
-# نمایش فاکتور نهایی
+# نمایش فاکتور نهایی (فقط قیمت کل)
 def show_invoice(chat_id):
     if chat_id not in user_orders or not user_orders[chat_id]:
         bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=main_menu())
@@ -304,7 +328,7 @@ def show_invoice(chat_id):
     total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id]
     items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
 
-    bot.send_message(chat_id, f"📝 فاکتور نهایی شما برای {user_counts[chat_id]} نفر:\n{items_list}\n💰 مجموع: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت 5892101481952691 زهرا دوستدار واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
+    bot.send_message(chat_id, f"📝 سفارش شما برای {user_counts[chat_id]} نفر:\n{items_list}\n\n💰 مجموع: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت 5892101481952691 زهرا دوستدار واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
 
 # مدیریت دریافت فیش پرداخت
 @bot.message_handler(content_types=['photo'])
