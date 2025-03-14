@@ -4,7 +4,7 @@ import time
 import logging
 
 
-ADMIN_ID = 99510185
+ADMIN_ID = 6462791603
 
 
 # این خط‌ها برای راه‌اندازی سرور Flask و گرفتن URL عمومی
@@ -252,18 +252,9 @@ def show_invoice(chat_id):
 
     bot.send_message(chat_id, f"📝 فاکتور نهایی شما برای {user_counts[chat_id]} نفر:\n{items_list}\n💰 مجموع: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت **1234-5678-9012-3456** واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
 
-# 🟢 اجرای ربات با مدیریت خطا
-def run_bot():
-    while True:
-        try:
-            set_persistent_menu()
-            bot.polling(none_stop=True, interval=1, timeout=20)
-        except Exception as e:
-            logging.error(f"خطا در اجرا: {e}")
-            time.sleep(5)
 
 
-
+# 📌 دریافت فیش پرداخت از کاربر
 @bot.message_handler(content_types=['photo'])
 def handle_payment_receipt(message):
     chat_id = message.chat.id
@@ -279,7 +270,20 @@ def handle_payment_receipt(message):
     # ارسال پیام به کاربر
     bot.send_message(chat_id, "✅ فیش شما دریافت شد، لطفاً منتظر بمانید تا بررسی شود.")
 
-    # ارسال اطلاعات برای ادمین
+    # ذخیره اطلاعات پرداخت در لیست بررسی
+    pending_payments[message.photo[-1].file_id] = {
+        "user_id": chat_id,
+        "username": message.from_user.first_name,
+        "total": total,
+        "items": items_list
+    }
+
+    # دکمه‌های تأیید و رد
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("✅ تأیید پرداخت", callback_data=f"approve_{message.photo[-1].file_id}"))
+    markup.add(InlineKeyboardButton("❌ رد پرداخت", callback_data=f"reject_{message.photo[-1].file_id}"))
+
+    # ارسال اطلاعات برای ادمین همراه با دکمه‌ها
     caption = (f"🆕 پرداخت جدید دریافت شد!\n"
                f"👤 کاربر: {message.from_user.first_name}\n"
                f"👥 تعداد نفرات: {user_counts[chat_id]}\n"
@@ -287,10 +291,56 @@ def handle_payment_receipt(message):
                f"💰 مبلغ واریزی: {total} تومان\n\n"
                "📌 لطفاً بررسی کنید.")
 
-    # 🟢 این خط اضافه شده که عکس فیش رو برای ادمین بفرسته
-    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
+    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption, reply_markup=markup)
 
-  
+# 📌 تأیید یا رد پرداخت توسط ادمین
+@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
+def process_payment_decision(call):
+    admin_id = call.message.chat.id
+    if admin_id != ADMIN_ID:
+        bot.answer_callback_query(call.id, "⛔ شما اجازه انجام این عملیات را ندارید.")
+        return
+
+    # استخراج اطلاعات پرداخت
+    file_id = call.data.split("_")[1]
+    payment_info = pending_payments.pop(file_id, None)
+
+    if not payment_info:
+        bot.answer_callback_query(call.id, "⛔ اطلاعات پرداخت یافت نشد.")
+        return
+
+    user_id = payment_info["user_id"]
+    username = payment_info["username"]
+
+    if call.data.startswith("approve_"):
+        # تأیید پرداخت
+        bot.send_message(user_id, "✅ پرداخت شما تأیید شد! سفارش شما در حال آماده‌سازی است. 🎉")
+        bot.send_message(ADMIN_ID, f"✅ پرداخت کاربر {username} تأیید شد. سفارش در حال پردازش است.")
+        bot.answer_callback_query(call.id, "✅ پرداخت تأیید شد!")
+    else:
+        # رد پرداخت
+        bot.send_message(user_id, "❌ پرداخت شما تأیید نشد. لطفاً با پشتیبانی تماس بگیرید.")
+        bot.send_message(ADMIN_ID, f"❌ پرداخت کاربر {username} رد شد.")
+        bot.answer_callback_query(call.id, "❌ پرداخت رد شد!")
+
+    # حذف دکمه‌ها از پیام اصلی
+    try:
+        bot.edit_message_reply_markup(ADMIN_ID, call.message.message_id, reply_markup=None)
+    except Exception as e:
+        logging.error(f"خطا در حذف دکمه‌ها: {e}")
+
+
+
+# 🟢 اجرای ربات با مدیریت خطا
+def run_bot():
+    while True:
+        try:
+            set_persistent_menu()
+            bot.polling(none_stop=True, interval=1, timeout=20)
+        except Exception as e:
+            logging.error(f"خطا در اجرا: {e}")
+            time.sleep(5)
+
 
 if __name__ == "__main__":
     run_bot()
