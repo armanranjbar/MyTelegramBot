@@ -305,7 +305,7 @@ def handle_payment_receipt(message):
 # 📌 تأیید یا رد پرداخت توسط ادمین
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
 def process_payment_decision(call):
-    global pending_payments
+    global pending_payments  # اضافه کردن متغیر به عنوان متغیر سراسری
 
     admin_id = call.message.chat.id
     if admin_id != ADMIN_ID:
@@ -314,14 +314,17 @@ def process_payment_decision(call):
 
     # استخراج `payment_id`
     payment_id = call.data.split("_")[1]
-    payment_info = pending_payments.pop(payment_id, None)
-
-    if not payment_info:
-        bot.answer_callback_query(call.id, "⛔ اطلاعات پرداخت یافت نشد.")
+    
+    if payment_id not in pending_payments:
+        bot.answer_callback_query(call.id, "⛔ اطلاعات پرداخت یافت نشد!")
         return
+
+    payment_info = pending_payments.pop(payment_id)
 
     user_id = payment_info["user_id"]
     username = payment_info["username"]
+    total = payment_info["total"]
+    items_list = payment_info["items"]
 
     if call.data.startswith("approve_"):
         # تأیید پرداخت
@@ -338,7 +341,8 @@ def process_payment_decision(call):
     try:
         bot.edit_message_reply_markup(ADMIN_ID, call.message.message_id, reply_markup=None)
     except Exception as e:
-        logging.error(f"خطا در حذف دکمه‌ها: {e}")
+        logging.error(f"⚠️ خطا در حذف دکمه‌ها: {e}")
+
 
 
 
