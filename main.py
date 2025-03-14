@@ -3,6 +3,10 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 import time
 import logging
 
+
+ADMIN_ID = 6410680572
+
+
 # این خط‌ها برای راه‌اندازی سرور Flask و گرفتن URL عمومی
 from background import keep_alive
 keep_alive()
@@ -257,6 +261,36 @@ def run_bot():
         except Exception as e:
             logging.error(f"خطا در اجرا: {e}")
             time.sleep(5)
+
+
+
+@bot.message_handler(content_types=['photo'])
+def handle_payment_receipt(message):
+    chat_id = message.chat.id
+
+    if chat_id not in user_orders or not user_orders[chat_id]:
+        bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=main_menu())
+        return
+
+    # ذخیره اطلاعات سفارش
+    total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id]
+    items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
+
+    # ارسال پیام به کاربر
+    bot.send_message(chat_id, "✅ فیش شما دریافت شد، لطفاً منتظر بمانید تا بررسی شود.")
+
+    # ارسال اطلاعات برای ادمین
+    caption = (f"🆕 پرداخت جدید دریافت شد!\n"
+               f"👤 کاربر: {message.from_user.first_name}\n"
+               f"👥 تعداد نفرات: {user_counts[chat_id]}\n"
+               f"📝 سفارشات:\n{items_list}\n"
+               f"💰 مبلغ واریزی: {total} تومان\n\n"
+               "📌 لطفاً بررسی کنید.")
+
+    # 🟢 این خط اضافه شده که عکس فیش رو برای ادمین بفرسته
+    bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption)
+
+  
 
 if __name__ == "__main__":
     run_bot()
