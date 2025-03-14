@@ -4,8 +4,8 @@ import time
 import logging
 import uuid
 
+# شناسه ادمین
 ADMIN_ID = 6410680572
-
 
 # این خط‌ها برای راه‌اندازی سرور Flask و گرفتن URL عمومی
 from background import keep_alive
@@ -14,16 +14,16 @@ keep_alive()
 # تنظیم لاگ برای دیباگ
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# 🔒 توکن رباتت رو اینجا بذار
+# توکن ربات
 TOKEN = "8130794230:AAHWF5jJ4mndYc1W8t2g_YIBbEGwjnV8sd4"
 bot = telebot.TeleBot(TOKEN)
 
-pending_payments = {}
+# دیکشنری‌ها برای ذخیره اطلاعات
+pending_payments = {}  # برای ذخیره پرداخت‌های در انتظار تأیید
 user_orders = {}  # ساختار: {chat_id: {item: count}}
 user_counts = {}  # تعداد نفرات
 
-
-# 📌 قیمت‌ها
+# قیمت‌ها
 prices = {
     "starter_olive": ("🫒 زیتون", 50),
     "starter_yogurt": ("🍶 ماست", 30),
@@ -34,7 +34,7 @@ prices = {
     "main_badkobe": ("🥮 بادکوبه", 200)
 }
 
-# 📌 تنظیم منوی همیشگی
+# تنظیم منوی همیشگی
 def set_persistent_menu():
     commands = [
         BotCommand("start", "🔄 شروع مجدد"),
@@ -44,14 +44,14 @@ def set_persistent_menu():
     ]
     bot.set_my_commands(commands)
 
-# 📌 دکمه "🔙 بازگشت به منو"
+# دکمه "🔙 بازگشت به منو"
 def back_to_menu():
     markup = InlineKeyboardMarkup()
     btn_back = InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")
     markup.add(btn_back)
     return markup
 
-# 🎨 ایجاد منوی اصلی
+# ایجاد منوی اصلی
 def main_menu():
     markup = InlineKeyboardMarkup(row_width=2)
     btn1 = InlineKeyboardButton("🍽 پیش‌غذا", callback_data="starter")
@@ -62,7 +62,7 @@ def main_menu():
     markup.add(btn1, btn2, btn3, btn4, btn5)
     return markup
 
-# ✅ وقتی کاربر /start بزنه، عکس و متن خوشامدگویی نمایش داده بشه
+# وقتی کاربر /start بزنه، عکس و متن خوشامدگویی نمایش داده بشه
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     chat_id = message.chat.id
@@ -92,22 +92,22 @@ def send_welcome(message):
 
     set_persistent_menu()
 
-# ✅ نمایش منو با /menu
+# نمایش منو با /menu
 @bot.message_handler(commands=['menu'])
 def show_menu(message):
     bot.send_message(message.chat.id, "📜 منوی اصلی:", reply_markup=main_menu())
 
-# ✅ مشاهده فاکتور با /checkout
+# مشاهده فاکتور با /checkout
 @bot.message_handler(commands=['checkout'])
 def checkout_command(message):
     show_invoice(message.chat.id)
 
-# ✅ ویرایش فاکتور با /edit
+# ویرایش فاکتور با /edit
 @bot.message_handler(commands=['edit'])
 def edit_command(message):
     edit_order(message.chat.id)
 
-# 🎯 واکنش به دکمه‌ها
+# واکنش به دکمه‌ها
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     chat_id = call.message.chat.id
@@ -129,6 +129,33 @@ def callback_query(call):
             edit_order(chat_id)
         elif call.data.startswith("remove_"):
             remove_item(call)
+        # مدیریت دکمه‌های تأیید و رد پرداخت
+        elif call.data.startswith("approve_") or call.data.startswith("reject_"):
+            admin_id = call.message.chat.id
+            if admin_id != ADMIN_ID:
+                bot.answer_callback_query(call.id, "⛔ شما اجازه انجام این عملیات را ندارید.")
+                return
+            payment_id = call.data.split("_")[1]
+            if payment_id not in pending_payments:
+                bot.answer_callback_query(call.id, "⛔ اطلاعات پرداخت یافت نشد!")
+                return
+            payment_info = pending_payments.pop(payment_id)
+            user_id = payment_info["user_id"]
+            username = payment_info["username"]
+            total = payment_info["total"]
+            items_list = payment_info["items"]
+            if call.data.startswith("approve_"):
+                bot.send_message(user_id, "✅ پرداخت شما تأیید شد! سفارش شما در حال آماده‌سازی است. 🎉")
+                bot.send_message(ADMIN_ID, f"✅ پرداخت کاربر {username} تأیید شد. سفارش در حال پردازش است.")
+                bot.answer_callback_query(call.id, "✅ پرداخت تأیید شد!")
+            else:
+                bot.send_message(user_id, "❌ پرداخت شما تأیید نشد. لطفاً با پشتیبانی تماس بگیرید.")
+                bot.send_message(ADMIN_ID, f"❌ پرداخت کاربر {username} رد شد.")
+                bot.answer_callback_query(call.id, "❌ پرداخت رد شد!")
+            try:
+                bot.edit_message_reply_markup(ADMIN_ID, call.message.message_id, reply_markup=None)
+            except Exception as e:
+                logging.error(f"⚠️ خطا در حذف دکمه‌ها: {e}")
         # فقط برای back_to_menu از edit_message_text استفاده کن
         elif call.data == "back_to_menu":
             bot.edit_message_text("📜 منوی اصلی:", chat_id, call.message.id, reply_markup=main_menu())
@@ -147,14 +174,14 @@ def callback_query(call):
         logging.error(f"خطا در پردازش دکمه: {e}")
         bot.send_message(chat_id, "⚠️ یه مشکلی پیش اومد، لطفاً دوباره امتحان کن!")
 
-# 📌 تغییر تعداد نفرات
+# تغییر تعداد نفرات
 def update_count(call):
     chat_id = call.message.chat.id
     count = int(call.data.split("_")[1])
     user_counts[chat_id] = count
     bot.edit_message_text(f"✅ تعداد نفرات تنظیم شد: {count} نفر", chat_id, call.message.id, reply_markup=back_to_menu())
 
-# 📌 منوی انتخاب پیش‌غذا
+# منوی انتخاب پیش‌غذا
 def starter_menu():
     markup = InlineKeyboardMarkup(row_width=1)
     btn1 = InlineKeyboardButton("🫒 زیتون - 50 تومان", callback_data="starter_olive")
@@ -164,7 +191,7 @@ def starter_menu():
     markup.add(btn1, btn2, btn3, btn_back)
     return markup
 
-# 📌 منوی انتخاب غذای اصلی
+# منوی انتخاب غذای اصلی
 def main_course_menu():
     markup = InlineKeyboardMarkup(row_width=1)
     btn1 = InlineKeyboardButton("🍝 ماکارونی - 100 تومان", callback_data="main_pasta")
@@ -175,7 +202,7 @@ def main_course_menu():
     markup.add(btn1, btn2, btn3, btn4, btn_back)
     return markup
 
-# 📌 منوی انتخاب تعداد نفرات
+# منوی انتخاب تعداد نفرات
 def select_count_menu():
     markup = InlineKeyboardMarkup(row_width=3)
     for i in range(1, 6):
@@ -183,7 +210,7 @@ def select_count_menu():
     markup.add(InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu"))
     return markup
 
-# 📌 منوی انتخاب تعداد برای هر محصول (1 تا 10)
+# منوی انتخاب تعداد برای هر محصول (1 تا 10)
 def select_item_count_menu(item):
     markup = InlineKeyboardMarkup(row_width=3)
     for i in range(1, 11):
@@ -191,14 +218,14 @@ def select_item_count_menu(item):
     markup.add(InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_menu"))
     return markup
 
-# 📌 ذخیره سفارشات با تعداد
+# ذخیره سفارشات با تعداد
 def add_to_order(chat_id, item, count):
     if chat_id not in user_orders:
         user_orders[chat_id] = {}
     user_orders[chat_id][item] = count
     logging.info(f"سفارش اضافه شد: {item} - {count} عدد برای {chat_id}")
 
-# 📌 ویرایش فاکتور
+# ویرایش فاکتور
 def edit_order(chat_id):
     if chat_id not in user_orders or not user_orders[chat_id]:
         bot.send_message(chat_id, "⛔ هنوز سفارشی ثبت نکرده‌اید!", reply_markup=main_menu())
@@ -211,7 +238,7 @@ def edit_order(chat_id):
 
     bot.send_message(chat_id, "📝 مواردی که می‌خواهید حذف کنید را انتخاب کنید:", reply_markup=markup)
 
-# 📌 حذف آیتم از فاکتور
+# حذف آیتم از فاکتور
 def remove_item(call):
     chat_id = call.message.chat.id
     item = call.data.split("_", 1)[1]  # کل بخش بعد از "remove_" رو بگیر
@@ -244,7 +271,7 @@ def remove_item(call):
     else:
         bot.send_message(chat_id, "⛔ همه سفارشات حذف شدند!", reply_markup=back_to_menu())
 
-# 📌 نمایش فاکتور نهایی
+# نمایش فاکتور نهایی
 def show_invoice(chat_id):
     if chat_id not in user_orders or not user_orders[chat_id]:
         bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=main_menu())
@@ -253,15 +280,11 @@ def show_invoice(chat_id):
     total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id]
     items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
 
-    bot.send_message(chat_id, f"📝 فاکتور نهایی شما برای {user_counts[chat_id]} نفر:\n{items_list}\n💰 مجموع: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت 5892101481952691  زهرا دوستدار واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
+    bot.send_message(chat_id, f"📝 فاکتور نهایی شما برای {user_counts[chat_id]} نفر:\n{items_list}\n💰 مجموع: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت 5892101481952691 زهرا دوستدار واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
 
-
-
-
+# مدیریت دریافت فیش پرداخت
 @bot.message_handler(content_types=['photo'])
 def handle_payment_receipt(message):
-    global pending_payments
-
     chat_id = message.chat.id
 
     if chat_id not in user_orders or not user_orders[chat_id]:
@@ -281,7 +304,7 @@ def handle_payment_receipt(message):
     # ذخیره اطلاعات پرداخت در لیست بررسی
     pending_payments[payment_id] = {  
         "user_id": chat_id,
-        "username": message.from_user.first_name,
+        "username": message.from_user.first_name if message.from_user.first_name else "کاربر",
         "total": total,
         "items": items_list,
         "file_id": message.photo[-1].file_id
@@ -294,7 +317,7 @@ def handle_payment_receipt(message):
 
     # ارسال اطلاعات برای ادمین همراه با دکمه‌ها
     caption = (f"🆕 پرداخت جدید دریافت شد!\n"
-               f"👤 کاربر: {message.from_user.first_name}\n"
+               f"👤 کاربر: {message.from_user.first_name if message.from_user.first_name else 'کاربر'}\n"
                f"👥 تعداد نفرات: {user_counts[chat_id]}\n"
                f"📝 سفارشات:\n{items_list}\n"
                f"💰 مبلغ واریزی: {total} تومان\n\n"
@@ -302,51 +325,7 @@ def handle_payment_receipt(message):
 
     bot.send_photo(ADMIN_ID, message.photo[-1].file_id, caption=caption, reply_markup=markup)
 
-# 📌 تأیید یا رد پرداخت توسط ادمین
-@bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
-def process_payment_decision(call):
-    global pending_payments  # اضافه کردن متغیر به عنوان متغیر سراسری
-
-    admin_id = call.message.chat.id
-    if admin_id != ADMIN_ID:
-        bot.answer_callback_query(call.id, "⛔ شما اجازه انجام این عملیات را ندارید.")
-        return
-
-    # استخراج `payment_id`
-    payment_id = call.data.split("_")[1]
-    
-    if payment_id not in pending_payments:
-        bot.answer_callback_query(call.id, "⛔ اطلاعات پرداخت یافت نشد!")
-        return
-
-    payment_info = pending_payments.pop(payment_id)
-
-    user_id = payment_info["user_id"]
-    username = payment_info["username"]
-    total = payment_info["total"]
-    items_list = payment_info["items"]
-
-    if call.data.startswith("approve_"):
-        # تأیید پرداخت
-        bot.send_message(user_id, "✅ پرداخت شما تأیید شد! سفارش شما در حال آماده‌سازی است. 🎉")
-        bot.send_message(ADMIN_ID, f"✅ پرداخت کاربر {username} تأیید شد. سفارش در حال پردازش است.")
-        bot.answer_callback_query(call.id, "✅ پرداخت تأیید شد!")
-    else:
-        # رد پرداخت
-        bot.send_message(user_id, "❌ پرداخت شما تأیید نشد. لطفاً با پشتیبانی تماس بگیرید.")
-        bot.send_message(ADMIN_ID, f"❌ پرداخت کاربر {username} رد شد.")
-        bot.answer_callback_query(call.id, "❌ پرداخت رد شد!")
-
-    # حذف دکمه‌ها از پیام اصلی
-    try:
-        bot.edit_message_reply_markup(ADMIN_ID, call.message.message_id, reply_markup=None)
-    except Exception as e:
-        logging.error(f"⚠️ خطا در حذف دکمه‌ها: {e}")
-
-
-
-
-# 🟢 اجرای ربات با مدیریت خطا
+# اجرای ربات با مدیریت خطا
 def run_bot():
     while True:
         try:
@@ -355,7 +334,6 @@ def run_bot():
         except Exception as e:
             logging.error(f"خطا در اجرا: {e}")
             time.sleep(5)
-
 
 if __name__ == "__main__":
     run_bot()
