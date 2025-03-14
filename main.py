@@ -4,7 +4,7 @@ import time
 import logging
 
 
-ADMIN_ID = 6462791603
+ADMIN_ID = 99510185
 
 
 # این خط‌ها برای راه‌اندازی سرور Flask و گرفتن URL عمومی
