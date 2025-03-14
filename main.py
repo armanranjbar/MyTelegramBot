@@ -254,13 +254,14 @@ def show_invoice(chat_id):
 
 
 
+
 # 📌 دریافت فیش پرداخت از کاربر
 @bot.message_handler(content_types=['photo'])
 def handle_payment_receipt(message):
     chat_id = message.chat.id
 
     if chat_id not in user_orders or not user_orders[chat_id]:
-        bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=main_menu())
+        bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=back_to_menu())
         return
 
     # ذخیره اطلاعات سفارش
@@ -271,7 +272,7 @@ def handle_payment_receipt(message):
     bot.send_message(chat_id, "✅ فیش شما دریافت شد، لطفاً منتظر بمانید تا بررسی شود.")
 
     # ذخیره اطلاعات پرداخت در لیست بررسی
-    pending_payments[message.photo[-1].file_id] = {
+    pending_payments[message.photo[-1].file_id] = {  # 🟢 اینجا `pending_payments` مقداردهی شده
         "user_id": chat_id,
         "username": message.from_user.first_name,
         "total": total,
