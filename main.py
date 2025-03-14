@@ -2,7 +2,7 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 import time
 import logging
-
+import uuid
 
 ADMIN_ID = 6462791603
 
@@ -30,7 +30,8 @@ prices = {
     "starter_salad": ("🥗 سالاد", 40),
     "main_pasta": ("🍝 ماکارونی", 100),
     "main_kashk": ("🍆 کشک بادمجان", 90),
-    "main_potato": ("🍟 سیب‌زمینی", 70)
+    "main_potato": ("🍟 سیب‌زمینی", 70),
+    "main_badkobe": ("🥮 بادکوبه", 200)
 }
 
 # 📌 تنظیم منوی همیشگی
@@ -169,8 +170,9 @@ def main_course_menu():
     btn1 = InlineKeyboardButton("🍝 ماکارونی - 100 تومان", callback_data="main_pasta")
     btn2 = InlineKeyboardButton("🍆 کشک بادمجان - 90 تومان", callback_data="main_kashk")
     btn3 = InlineKeyboardButton("🍟 سیب‌زمینی - 70 تومان", callback_data="main_potato")
+    btn4 = InlineKeyboardButton("🥮 بادکوبه - 200 تومان", callback_data="main_badkobe")
     btn_back = InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")
-    markup.add(btn1, btn2, btn3, btn_back)
+    markup.add(btn1, btn2, btn3, btn4, btn_back)
     return markup
 
 # 📌 منوی انتخاب تعداد نفرات
@@ -251,19 +253,23 @@ def show_invoice(chat_id):
     total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id]
     items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
 
-    bot.send_message(chat_id, f"📝 فاکتور نهایی شما برای {user_counts[chat_id]} نفر:\n{items_list}\n💰 مجموع: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت **1234-5678-9012-3456** واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
+    bot.send_message(chat_id, f"📝 فاکتور نهایی شما برای {user_counts[chat_id]} نفر:\n{items_list}\n💰 مجموع: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت 5892101481952691  زهرا دوستدار واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
 
 
 
 
-# 📌 دریافت فیش پرداخت از کاربر
 @bot.message_handler(content_types=['photo'])
 def handle_payment_receipt(message):
+    global pending_payments
+
     chat_id = message.chat.id
 
     if chat_id not in user_orders or not user_orders[chat_id]:
         bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=back_to_menu())
         return
+
+    # ایجاد شناسه کوتاه و یکتا برای ذخیره پرداخت‌ها
+    payment_id = str(uuid.uuid4())[:8]  # ایجاد شناسه کوتاه 8 کاراکتری
 
     # ذخیره اطلاعات سفارش
     total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id]
@@ -273,17 +279,18 @@ def handle_payment_receipt(message):
     bot.send_message(chat_id, "✅ فیش شما دریافت شد، لطفاً منتظر بمانید تا بررسی شود.")
 
     # ذخیره اطلاعات پرداخت در لیست بررسی
-    pending_payments[message.photo[-1].file_id] = {  # 🟢 اینجا `pending_payments` مقداردهی شده
+    pending_payments[payment_id] = {  
         "user_id": chat_id,
         "username": message.from_user.first_name,
         "total": total,
-        "items": items_list
+        "items": items_list,
+        "file_id": message.photo[-1].file_id
     }
 
     # دکمه‌های تأیید و رد
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("✅ تأیید پرداخت", callback_data=f"approve_{message.photo[-1].file_id}"))
-    markup.add(InlineKeyboardButton("❌ رد پرداخت", callback_data=f"reject_{message.photo[-1].file_id}"))
+    markup.add(InlineKeyboardButton("✅ تأیید پرداخت", callback_data=f"approve_{payment_id}"))
+    markup.add(InlineKeyboardButton("❌ رد پرداخت", callback_data=f"reject_{payment_id}"))
 
     # ارسال اطلاعات برای ادمین همراه با دکمه‌ها
     caption = (f"🆕 پرداخت جدید دریافت شد!\n"
@@ -298,14 +305,16 @@ def handle_payment_receipt(message):
 # 📌 تأیید یا رد پرداخت توسط ادمین
 @bot.callback_query_handler(func=lambda call: call.data.startswith("approve_") or call.data.startswith("reject_"))
 def process_payment_decision(call):
+    global pending_payments
+
     admin_id = call.message.chat.id
     if admin_id != ADMIN_ID:
         bot.answer_callback_query(call.id, "⛔ شما اجازه انجام این عملیات را ندارید.")
         return
 
-    # استخراج اطلاعات پرداخت
-    file_id = call.data.split("_")[1]
-    payment_info = pending_payments.pop(file_id, None)
+    # استخراج `payment_id`
+    payment_id = call.data.split("_")[1]
+    payment_info = pending_payments.pop(payment_id, None)
 
     if not payment_info:
         bot.answer_callback_query(call.id, "⛔ اطلاعات پرداخت یافت نشد.")
