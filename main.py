@@ -4,7 +4,7 @@ import time
 import logging
 import uuid
 
-ADMIN_ID = 6462791603
+ADMIN_ID = 6410680572
 
 
 # این خط‌ها برای راه‌اندازی سرور Flask و گرفتن URL عمومی
@@ -18,10 +18,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 TOKEN = "8130794230:AAHWF5jJ4mndYc1W8t2g_YIBbEGwjnV8sd4"
 bot = telebot.TeleBot(TOKEN)
 
-# 📌 دیکشنری برای ذخیره سفارشات (محصول و تعداد) و تعداد نفرات
+pending_payments = {}
 user_orders = {}  # ساختار: {chat_id: {item: count}}
 user_counts = {}  # تعداد نفرات
-pending_payments = {}
+
 
 # 📌 قیمت‌ها
 prices = {
