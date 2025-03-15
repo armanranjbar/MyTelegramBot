@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 # شناسه ادمین
-ADMIN_ID = 6410680572
+ADMIN_ID = 99510185
 
 # این خط‌ها برای راه‌اندازی سرور Flask و گرفتن URL عمومی
 from background import keep_alive
