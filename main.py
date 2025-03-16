@@ -40,9 +40,9 @@ prices = {
     "cocktail_mojito": ("کوکتل موهیتو", 100)
 }
 
-# هزینه ورودی برای هر نفر
-ENTRY_FEE_WITH_CAR = 50  # با ماشین
-ENTRY_FEE_WITHOUT_CAR = 100  # بدون ماشین
+# هزینه‌ها
+ENTRY_FEE_WITH_CAR = 50  # هزینه ورود با ماشین به ازای هر نفر
+ENTRY_FEE_BASE = 100    # هزینه ورودی پایه به ازای هر نفر
 
 # تنظیم منوی همیشگی (دستورات پایین سمت چپ)
 def set_persistent_menu():
@@ -153,15 +153,15 @@ def cocktail_command(message):
 def calculate_total(chat_id):
     if chat_id not in user_orders or not user_orders[chat_id] or chat_id not in user_counts or user_counts[chat_id] <= 0:
         return 0, 0, 0
-    # محاسبه هزینه سفارش‌ها
-    base_total_per_person = sum(prices[item][1] * count for item, count in user_orders[chat_id].items())
-    base_total = base_total_per_person * user_counts[chat_id]
+    # محاسبه هزینه سفارش‌ها فقط بر اساس تعداد آیتم‌ها (بدون ضرب در نفرات)
+    base_total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items())
     # لاگ برای دیباگ
     logging.info(f"chat_id: {chat_id}, user_orders: {user_orders[chat_id]}, user_counts: {user_counts[chat_id]}")
-    logging.info(f"base_total_per_person: {base_total_per_person}, base_total: {base_total}")
-    # محاسبه هزینه ورودی
-    entry_fee_per_person = ENTRY_FEE_WITH_CAR if user_entry_type[chat_id] == "with_car" else ENTRY_FEE_WITHOUT_CAR
-    entry_fee = entry_fee_per_person * user_counts[chat_id]
+    logging.info(f"base_total (items only): {base_total}")
+    # محاسبه هزینه ورود با ماشین و ورودی پایه بر اساس تعداد نفرات
+    entry_fee_car = ENTRY_FEE_WITH_CAR * user_counts[chat_id]
+    entry_fee_base = ENTRY_FEE_BASE * user_counts[chat_id]
+    entry_fee = entry_fee_car + entry_fee_base
     total = base_total + entry_fee
     return base_total, entry_fee, total
 
@@ -344,7 +344,7 @@ def show_final_invoice(chat_id, entry_type_text):
     base_total, entry_fee, total = calculate_total(chat_id)
     items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
     invoice_text = (
-        f"📝 سفارش شما برای {user_counts[chat_id]} نفر:\n"
+        f"📝 سفارش شما:\n"
         f"{items_list}\n\n"
         f"💵 هزینه سفارش‌ها: {base_total} تومان\n"
         f"🚪 هزینه ورودی ({entry_type_text}): {entry_fee} تومان\n"
