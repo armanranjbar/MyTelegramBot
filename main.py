@@ -40,6 +40,9 @@ prices = {
     "cocktail_mojito": ("کوکتل موهیتو", 100)
 }
 
+# هزینه ورودی ثابت برای هر نفر
+ENTRY_FEE_PER_PERSON = 100
+
 # تنظیم منوی همیشگی (دستورات پایین سمت چپ)
 def set_persistent_menu():
     commands = [
@@ -48,7 +51,7 @@ def set_persistent_menu():
         BotCommand("checkout", "💳 مشاهده فاکتور"),
         BotCommand("edit", "📝 ویرایش فاکتور"),
         BotCommand("event", "📅 تاریخ جشن"),
-        BotCommand("cocktail", "🍹 کوکتل"),  # اضافه کردن کوکتل
+        BotCommand("cocktail", "🍹 کوکتل"),
     ]
     bot.set_my_commands(commands)
 
@@ -92,7 +95,7 @@ def send_welcome(message):
     chat_id = message.chat.id
     user_orders[chat_id] = {}
     user_counts[chat_id] = 0
-    user_entry_type[chat_id] = None  # مقدار پیش‌فرض برای نوع ورود
+    user_entry_type[chat_id] = None
 
     first_name = message.from_user.first_name if message.from_user.first_name else "دوست عزیز"
     welcome_caption = (
@@ -145,6 +148,15 @@ def edit_command(message):
 def cocktail_command(message):
     bot.send_message(message.chat.id, "🍹 کوکتل‌ها:\n👇 یکی از گزینه‌های زیر رو انتخاب کن:", reply_markup=cocktail_menu())
 
+# تابع محاسبه کل مبلغ
+def calculate_total(chat_id):
+    if chat_id not in user_orders or not user_orders[chat_id] or chat_id not in user_counts or user_counts[chat_id] <= 0:
+        return 0, 0, 0
+    base_total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id]
+    entry_fee = ENTRY_FEE_PER_PERSON * user_counts[chat_id]  # هزینه ورودی برای هر نفر
+    total = base_total + entry_fee
+    return base_total, entry_fee, total
+
 # واکنش به دکمه‌ها
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
@@ -172,14 +184,10 @@ def callback_query(call):
             show_event_timer(chat_id)
         elif call.data == "with_car":
             user_entry_type[chat_id] = "with_car"
-            total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id] + 50
-            items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
-            bot.send_message(chat_id, f"📝 سفارش شما برای {user_counts[chat_id]} نفر:\n{items_list}\n\n💰 مجموع پرداختی شما: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت 5892101481952691 زهرا دوستدار واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
+            show_final_invoice(chat_id, "با ماشین")
         elif call.data == "without_car":
             user_entry_type[chat_id] = "without_car"
-            total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id] + 100
-            items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
-            bot.send_message(chat_id, f"📝 سفارش شما برای {user_counts[chat_id]} نفر:\n{items_list}\n\n💰 مجموع پرداختی شما: {total} تومان\n\n💳 لطفاً مبلغ را به شماره کارت 5892101481952691 زهرا دوستدار واریز کنید و فیش را ارسال کنید.", reply_markup=back_to_menu())
+            show_final_invoice(chat_id, "بدون ماشین")
         elif call.data.startswith("approve_") or call.data.startswith("reject_"):
             admin_id = call.message.chat.id
             if admin_id != ADMIN_ID:
@@ -309,7 +317,7 @@ def remove_item(call):
     else:
         bot.send_message(chat_id, "⛔ همه سفارشات حذف شدند!", reply_markup=back_to_menu())
 
-# نمایش فاکتور نهایی
+# نمایش فاکتور نهایی برای انتخاب نحوه ورود
 def show_invoice(chat_id):
     if chat_id not in user_orders or not user_orders[chat_id]:
         bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=main_menu())
@@ -323,6 +331,23 @@ def show_invoice(chat_id):
     markup.add(btn1, btn2)
     bot.send_message(chat_id, "لطفاً نحوه ورود خودتون رو انتخاب کنید:", reply_markup=markup)
 
+# نمایش فاکتور نهایی با جزئیات
+def show_final_invoice(chat_id, entry_type_text):
+    base_total, entry_fee, total = calculate_total(chat_id)
+    items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
+    num_people = user_counts[chat_id]
+    entry_per_three = (num_people // 3) * 300 + (num_people % 3) * 100  # محاسبه برای هر 3 نفر 300 تومن
+    invoice_text = (
+        f"📝 سفارش شما برای {num_people} نفر:\n"
+        f"{items_list}\n\n"
+        f"💵 هزینه سفارش‌ها: {base_total} تومان\n"
+        f"🚪 هزینه ورودی ({entry_type_text}): {entry_fee} تومان\n"
+        f"   (هر 3 نفر 300 تومان، {num_people} نفر = {entry_per_three} تومان)\n"
+        f"💰 مجموع پرداختی شما: {total} تومان\n\n"
+        "💳 لطفاً مبلغ را به شماره کارت 5892101481952691 زهرا دوستدار واریز کنید و فیش را ارسال کنید."
+    )
+    bot.send_message(chat_id, invoice_text, reply_markup=back_to_menu())
+
 # مدیریت دریافت فیش پرداخت
 @bot.message_handler(content_types=['photo'])
 def handle_payment_receipt(message):
@@ -335,9 +360,7 @@ def handle_payment_receipt(message):
         return
 
     payment_id = str(uuid.uuid4())[:8]
-    base_total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items()) * user_counts[chat_id]
-    entry_fee = 50 if user_entry_type[chat_id] == "with_car" else 100
-    total = base_total + entry_fee
+    base_total, entry_fee, total = calculate_total(chat_id)
     items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
     entry_text = "با ماشین" if user_entry_type[chat_id] == "with_car" else "بدون ماشین"
     bot.send_message(chat_id, "✅ فیش شما دریافت شد، لطفاً منتظر بمانید تا بررسی شود.")
@@ -345,7 +368,7 @@ def handle_payment_receipt(message):
     pending_payments[payment_id] = {
         "user_id": chat_id,
         "username": message.from_user.first_name if message.from_user.first_name else "کاربر",
-        "total": total,  # مبلغ کل شامل هزینه ورود
+        "total": total,
         "items": items_list,
         "file_id": message.photo[-1].file_id,
         "entry_type": entry_text
@@ -359,7 +382,7 @@ def handle_payment_receipt(message):
         f"👤 کاربر: {message.from_user.first_name if message.from_user.first_name else 'کاربر'}\n"
         f"👥 تعداد نفرات: {user_counts[chat_id]}\n"
         f"📝 سفارشات:\n{items_list}\n"
-        f"🚗 نحوه ورود: {entry_text} ({entry_fee} تومان)\n"
+        f"🚗 نحوه ورود: {entry_text}\n"
         f"💰 مبلغ کل: {total} تومان\n\n"
         "📌 لطفاً بررسی کنید."
     )
