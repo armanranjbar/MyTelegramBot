@@ -36,7 +36,7 @@ prices = {
     "main_pasta": ("ماکارونی", 160),
     "main_badkobe": ("بادکوبه", 150),
     "cocktail_dough": ("کوکتل دوغ", 100),
-    "cocktail_watermelon": ("کوکتل هندوانه", 100),
+    "cocktail_orange": ("کوکتل پرتقال", 100),
     "cocktail_mojito": ("کوکتل موهیتو", 100)
 }
 
@@ -267,7 +267,7 @@ def main_course_menu():
 def cocktail_menu():
     markup = InlineKeyboardMarkup(row_width=1)
     btn1 = InlineKeyboardButton(f"کوکتل دوغ - {prices['cocktail_dough'][1]} تومان", callback_data="cocktail_dough")
-    btn2 = InlineKeyboardButton(f"کوکتل هندوانه - {prices['cocktail_watermelon'][1]} تومان", callback_data="cocktail_watermelon")
+    btn2 = InlineKeyboardButton(f"کوکتل پرتقال - {prices['cocktail_orange'][1]} تومان", callback_data="cocktail_orange")
     btn3 = InlineKeyboardButton(f"کوکتل موهیتو - {prices['cocktail_mojito'][1]} تومان", callback_data="cocktail_mojito")
     btn_back = InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")
     markup.add(btn1, btn2, btn3, btn_back)
