@@ -25,7 +25,7 @@ user_orders = {}  # ساختار: {chat_id: {item: count}}
 user_counts = {}  # تعداد نفرات
 user_entry_type = {}  # نوع ورود (with_car یا without_car)
 
-# قیمت‌ها (فقط برای محاسبه در پس‌زمینه)
+# قیمت‌ها
 prices = {
     "starter_olive": ("زیتون ساده", 40),
     "starter_olive_stuffed": ("زیتون پرورده", 50),
@@ -44,7 +44,7 @@ prices = {
 ENTRY_FEE_WITH_CAR = 50  # هزینه ورود با ماشین به ازای هر نفر
 ENTRY_FEE_BASE = 100    # هزینه ورودی پایه به ازای هر نفر
 
-# تنظیم منوی همیشگی (دستورات پایین سمت چپ)
+# تنظیم منوی همیشگی
 def set_persistent_menu():
     commands = [
         BotCommand("start", "🔄 شروع مجدد"),
@@ -56,14 +56,27 @@ def set_persistent_menu():
     ]
     bot.set_my_commands(commands)
 
-# دکمه "🔙 بازگشت به منو"
-def back_to_menu():
+# دکمه "ارسال فیش"
+def send_receipt_button():
     markup = InlineKeyboardMarkup()
-    btn_back = InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu")
-    markup.add(btn_back)
+    btn_send = InlineKeyboardButton("📤 ارسال فیش", callback_data="send_receipt")
+    markup.add(btn_send)
     return markup
 
-# تابع برای محاسبه و نمایش زمان باقی‌مونده به جشن
+# تابع برای محاسبه کل مبلغ
+def calculate_total(chat_id):
+    if chat_id not in user_orders or not user_orders[chat_id] or chat_id not in user_counts or user_counts[chat_id] <= 0:
+        return 0, 0, 0
+    base_total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items())
+    logging.info(f"chat_id: {chat_id}, user_orders: {user_orders[chat_id]}, user_counts: {user_counts[chat_id]}")
+    logging.info(f"base_total (items only): {base_total}")
+    entry_fee_car = ENTRY_FEE_WITH_CAR * user_counts[chat_id]
+    entry_fee_base = ENTRY_FEE_BASE * user_counts[chat_id]
+    entry_fee = entry_fee_car + entry_fee_base
+    total = base_total + entry_fee
+    return base_total, entry_fee, total
+
+# تابع نمایش زمان باقی‌مونده به جشن
 def show_event_timer(chat_id):
     event_time = datetime(2025, 3, 18, 19, 0)
     now = datetime.now()
@@ -77,7 +90,7 @@ def show_event_timer(chat_id):
         timer_message = "🎉 جشن چهارشنبه‌سوری شروع شده! خوش اومدی!"
     bot.send_message(chat_id, timer_message, reply_markup=back_to_menu())
 
-# ایجاد منوی اصلی
+# منوی اصلی
 def main_menu():
     markup = InlineKeyboardMarkup(row_width=2)
     btn1 = InlineKeyboardButton("👥 تعداد نفرات", callback_data="select_count")
@@ -149,22 +162,6 @@ def edit_command(message):
 def cocktail_command(message):
     bot.send_message(message.chat.id, "🍹 کوکتل‌ها:\n👇 یکی از گزینه‌های زیر رو انتخاب کن:", reply_markup=cocktail_menu())
 
-# تابع محاسبه کل مبلغ
-def calculate_total(chat_id):
-    if chat_id not in user_orders or not user_orders[chat_id] or chat_id not in user_counts or user_counts[chat_id] <= 0:
-        return 0, 0, 0
-    # محاسبه هزینه سفارش‌ها فقط بر اساس تعداد آیتم‌ها (بدون ضرب در نفرات)
-    base_total = sum(prices[item][1] * count for item, count in user_orders[chat_id].items())
-    # لاگ برای دیباگ
-    logging.info(f"chat_id: {chat_id}, user_orders: {user_orders[chat_id]}, user_counts: {user_counts[chat_id]}")
-    logging.info(f"base_total (items only): {base_total}")
-    # محاسبه هزینه ورود با ماشین و ورودی پایه بر اساس تعداد نفرات
-    entry_fee_car = ENTRY_FEE_WITH_CAR * user_counts[chat_id]
-    entry_fee_base = ENTRY_FEE_BASE * user_counts[chat_id]
-    entry_fee = entry_fee_car + entry_fee_base
-    total = base_total + entry_fee
-    return base_total, entry_fee, total
-
 # واکنش به دکمه‌ها
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
@@ -196,6 +193,8 @@ def callback_query(call):
         elif call.data == "without_car":
             user_entry_type[chat_id] = "without_car"
             show_final_invoice(chat_id, "بدون ماشین")
+        elif call.data == "send_receipt":
+            bot.edit_message_text("📤 لطفا عکس فیش رو بفرست همینجا و منتظر بمون 😎", chat_id, call.message.message_id)
         elif call.data.startswith("approve_") or call.data.startswith("reject_"):
             admin_id = call.message.chat.id
             if admin_id != ADMIN_ID:
@@ -219,8 +218,6 @@ def callback_query(call):
                 bot.send_message(ADMIN_ID, f"❌ پرداخت کاربر {username} رد شد.")
                 bot.answer_callback_query(call.id, "❌ پرداخت رد شد!")
             bot.edit_message_reply_markup(ADMIN_ID, call.message.message_id, reply_markup=None)
-        elif call.data == "back_to_menu":
-            bot.edit_message_text("📜 منوی اصلی:", chat_id, call.message.id, reply_markup=main_menu())
         elif call.data.startswith("select_count_"):
             parts = call.data.split("_")
             if len(parts) >= 4 and parts[0] == "select" and parts[1] == "count":
@@ -239,9 +236,9 @@ def update_count(call):
     chat_id = call.message.chat.id
     count = int(call.data.split("_")[1])
     user_counts[chat_id] = count
-    bot.edit_message_text(f"✅ تعداد نفرات تنظیم شد: {count} نفر", chat_id, call.message.id, reply_markup=back_to_menu())
+    bot.edit_message_text(f"✅ تعداد نفرات تنظیم شد: {count} نفر", chat_id, call.message.message_id, reply_markup=back_to_menu())
 
-# منوی انتخاب پیش‌غذا (با قیمت)
+# منوی انتخاب پیش‌غذا
 def starter_menu():
     markup = InlineKeyboardMarkup(row_width=1)
     btn1 = InlineKeyboardButton(f"زیتون ساده - {prices['starter_olive'][1]} تومان", callback_data="starter_olive")
@@ -253,7 +250,7 @@ def starter_menu():
     markup.add(btn1, btn2, btn3, btn4, btn5, btn_back)
     return markup
 
-# منوی انتخاب غذای اصلی (با قیمت)
+# منوی انتخاب غذای اصلی
 def main_course_menu():
     markup = InlineKeyboardMarkup(row_width=1)
     btn1 = InlineKeyboardButton(f"کشک بادمجان - {prices['main_kashk'][1]} تومان", callback_data="main_kashk")
@@ -263,7 +260,7 @@ def main_course_menu():
     markup.add(btn1, btn2, btn3, btn_back)
     return markup
 
-# منوی انتخاب کوکتل (با قیمت)
+# منوی انتخاب کوکتل
 def cocktail_menu():
     markup = InlineKeyboardMarkup(row_width=1)
     btn1 = InlineKeyboardButton(f"کوکتل دوغ - {prices['cocktail_dough'][1]} تومان", callback_data="cocktail_dough")
@@ -281,7 +278,7 @@ def select_count_menu():
     markup.add(InlineKeyboardButton("🔙 بازگشت به منو", callback_data="back_to_menu"))
     return markup
 
-# منوی انتخاب تعداد برای هر محصول (1 تا 10)
+# منوی انتخاب تعداد برای هر محصول
 def select_item_count_menu(item):
     markup = InlineKeyboardMarkup(row_width=3)
     for i in range(1, 11):
@@ -289,7 +286,7 @@ def select_item_count_menu(item):
     markup.add(InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_menu"))
     return markup
 
-# ذخیره سفارشات با تعداد
+# ذخیره سفارشات
 def add_to_order(chat_id, item, count):
     if chat_id not in user_orders:
         user_orders[chat_id] = {}
@@ -325,7 +322,7 @@ def remove_item(call):
     else:
         bot.send_message(chat_id, "⛔ همه سفارشات حذف شدند!", reply_markup=back_to_menu())
 
-# نمایش فاکتور نهایی برای انتخاب نحوه ورود
+# نمایش فاکتور برای انتخاب نحوه ورود
 def show_invoice(chat_id):
     if chat_id not in user_orders or not user_orders[chat_id]:
         bot.send_message(chat_id, "⛔ شما هنوز سفارشی ثبت نکرده‌اید!", reply_markup=main_menu())
@@ -339,7 +336,7 @@ def show_invoice(chat_id):
     markup.add(btn1, btn2)
     bot.send_message(chat_id, "لطفاً نحوه ورود خودتون رو انتخاب کنید:", reply_markup=markup)
 
-# نمایش فاکتور نهایی با جزئیات
+# نمایش فاکتور نهایی با دکمه ارسال فیش
 def show_final_invoice(chat_id, entry_type_text):
     base_total, entry_fee, total = calculate_total(chat_id)
     items_list = "\n".join([f"{prices[item][0]} ({count} عدد)" for item, count in user_orders[chat_id].items()])
@@ -352,7 +349,8 @@ def show_final_invoice(chat_id, entry_type_text):
         f"<b>عزیران لطفا بعد از پرداخت کارت به کارت حتما عکس فیش رو همینجا ارسال کنید 😎 ممنون از شما😊</b>\n"
         f"💳 لطفاً مبلغ را به شماره کارت <code>5892101481952691</code> زهرا دوستدار واریز کنید و فیش را ارسال کنید."
     )
-    bot.send_message(chat_id, invoice_text, reply_markup=back_to_menu(), parse_mode="HTML")
+    bot.send_message(chat_id, invoice_text, reply_markup=send_receipt_button(), parse_mode="HTML")
+
 # مدیریت دریافت فیش پرداخت
 @bot.message_handler(content_types=['photo'])
 def handle_payment_receipt(message):
