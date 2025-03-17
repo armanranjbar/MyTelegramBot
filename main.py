@@ -229,6 +229,8 @@ def callback_query(call):
             bot.send_message(chat_id, f"✅ {prices[item][0]} ({count} عدد) اضافه شد.", reply_markup=back_to_menu())
         elif call.data in prices:
             bot.send_message(chat_id, f"👇 تعداد {prices[call.data][0]} را مشخص کن:", reply_markup=select_item_count_menu(call.data))
+        elif call.data == "back_to_menu":
+            bot.edit_message_text("📜 منوی اصلی:", chat_id, call.message.id, reply_markup=main_menu())
     except Exception as e:
         logging.error(f"خطا: {e}")
         bot.send_message(chat_id, "⚠️ مشکل پیش اومد، دوباره امتحان کن!")
