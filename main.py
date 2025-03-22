@@ -15,8 +15,8 @@ keep_alive()
 # تنظیم لاگ
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# توکن ربات
-TOKEN = "8130794230:AAHWF5jJ4mndYc1W8t2g_YIBbEGwjnV8sd4"
+8130794230:AAHWF5jJ4mndYc1W8t2g_YIBbEGwjnV8sd4
+TOKEN = ""
 bot = telebot.TeleBot(TOKEN)
 
 # دیکشنری‌ها
